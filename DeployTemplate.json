@@ -1,0 +1,147 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "BSBCC": {
+            "type": "string",
+            "metadata": {
+                "description": "Please specify the BSBCC required for chargeback."
+            }
+        },
+        "LANID": {
+            "type": "string",
+            "metadata": {
+                "description": "Please specify the LANID for provisioning."
+            }
+        },
+        "OSType": {
+            "type": "string",
+            "allowedValues": [
+                "VSW2016",
+                "VSW10"
+            ],
+            "defaultValue": "W2016",
+            "metadata": {
+                "description": "Please specify type of OS."
+            }
+        }
+    },
+    "variables": {
+        "VirtualMachineName": "[concat(parameters('OSType'), parameters('LANID'))]",
+        "VirtualMachinePassword": "[concat('P@', guid(subscription().subscriptionId))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[concat(variables('VirtualMachineName'), '-Network')]",
+            "apiVersion": "2017-06-01",
+            "location": "[resourceGroup().location]",
+            "comments": "This will build a Virtual Network.",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.0.0.0/24"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[concat(variables('VirtualMachineName'), '-Network', '-Subnet1')]",
+                        "properties": {
+                            "addressPrefix": "10.0.0.0/24"
+                        }
+                    }
+                ]
+            },
+            "tags": {
+                "BSBCC": "[parameters('BSBCC')]",
+                "LANID": "[parameters('LANID')]"
+            }
+        },
+        {
+            "name": "[concat(variables('VirtualMachineName'), '-NIC')]",
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2017-06-01",
+            "location": "[resourceGroup().location]",
+            "comments": "This will be your Primary NIC",
+            "dependsOn": [
+                "[concat(variables('VirtualMachineName'), '-Network')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('VirtualMachineName'), '-Network'), concat(variables('VirtualMachineName'), '-Network', '-Subnet1'))]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic"
+                        }
+                    }
+                ]
+            },
+            "tags": {
+                "BSBCC": "[parameters('BSBCC')]",
+                "LANID": "[parameters('LANID')]"
+            }
+        },
+        {
+            "apiVersion": "2018-10-01",
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[concat(variables('VirtualMachineName'))]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "osProfile": {
+                    "computerName": "[variables('virtualMachineName')]",
+                    "adminUsername": "[concat(variables('VirtualMachineName'),'Admin')]",
+                    "adminPassword": "[variables('VirtualMachinePassword')]",
+                    "windowsConfiguration": {
+                        "provisionVmAgent": "true"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "properties": {
+                                "primary": true
+                            },
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('VirtualMachineName'), '-NIC'))]"
+                        }
+                    ]
+                },
+                "hardwareProfile": {
+                    "vmSize": "Standard_DS1_v2"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "MicrosoftVisualStudio",
+                        "offer": "VisualStudio",
+                        "sku": "[if(equals(parameters('OSType'), 'VSW10'), 'VS-2017-Ent-Win10-N', 'VS-2017-Ent-WS2016')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "FromImage"
+                    }
+                },
+                "licenseType": "Windows_Client"
+            },
+            "dependsOn": [
+                "[concat(variables('VirtualMachineName'), '-Network')]",
+                "[concat(variables('VirtualMachineName'), '-NIC')]"
+            ],
+            "tags": {
+                "BSBCC": "[parameters('BSBCC')]",
+                "LANID": "[parameters('LANID')]"
+            }
+        }
+    ],
+    "outputs": {
+        "VirtualMachineName": {
+            "type": "string",
+            "value": "[variables('VirtualMachineName')]"            
+        },
+        "VirtualMachinePassword": {
+            "type": "string",
+            "value": "[variables('VirtualMachinePassword')]"
+        }
+    }
+}
